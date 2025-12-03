@@ -113,7 +113,23 @@ annot:
   | COLON; ty=ty { ty }
 
 ty:
+  | t1=ty; ARROW; t2=ty { TFun (t1, t2) }
+  | ty=ty_pair { ty }
+
+ty_pair:
+  | t1=ty_atom; STAR; t2=ty_pair
+    { TPair (t1, t2) }
+  | ty=ty_atom { ty }
+
+ty_atom:
   | TUNIT { TUnit }
+  | TINT { TInt }
+  | TFLOAT { TFloat }
+  | TBOOL { TBool }
+  | x=TVAR { TVar x }
+  | ty=ty_atom; TLIST { TList ty }
+  | ty=ty_atom; TOPTION { TOption ty }
+  | LPAREN; ty=ty; RPAREN { ty }
 
 arg:
   | x=VAR { (x, None) }
@@ -130,6 +146,13 @@ expr:
 	}
     }
   | FUN; args=arg*; ARROW; body=expr { mk_func None args body }
+  | IF; e1=expr; THEN; e2=expr; ELSE; e3=expr { If (e1, e2, e3) }
+  | MATCH; e=expr; WITH; ALT; x1=VAR; COMMA; x2=VAR; ARROW; e1=expr
+    { PairMatch { matched = e; fst_name = x1; snd_name = x2; case = e1 } }
+  | MATCH; e=expr; WITH; ALT; SOME; x=VAR; ARROW; e1=expr; ALT; NONE; ARROW; e2=expr
+    { OptMatch { matched = e; some_name = x; some_case = e1; none_case = e2 } }
+  | MATCH; e=expr; WITH; ALT; hd=VAR; CONS; tl=VAR; ARROW; e1=expr; ALT; LBRACKET; RBRACKET; ARROW; e2=expr
+    { ListMatch { matched = e; hd_name = hd; tl_name = tl; cons_case = e1; nil_case = e2 } }
   | e = expr2 { e }
 
 %inline bop:
@@ -170,6 +193,11 @@ list_item:
 
 expr3:
   | LPAREN; RPAREN { Unit }
+  | LPAREN; e=expr; ty_annot=annot?; RPAREN
+    { match ty_annot with
+      | None -> e
+      | Some ty -> Annot (e, ty)
+    }
   | TRUE { Bool true }
   | FALSE { Bool false }
   | NONE { ENone }
